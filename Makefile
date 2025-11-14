@@ -42,7 +42,7 @@ build: lint
 		-a -o $(BIN_PATH) cmd/*.go
 
 run: install
-	STATION="T123" NAME="testburg" go run cmd/*.go
+	STATION="T0147" go run cmd/*.go
 
 # test:
 # 	go test -tags=test -race -parallel=10 -timeout 120s -cover -coverprofile=_out/.coverage -v $(PACKAGES);

@@ -13,37 +13,30 @@ import (
 
 var (
 	ErrMissingStation = errors.New("missing station value")
-	ErrMissingName    = errors.New("missing name value")
 
 	stationEnv, stationEnvSet = os.LookupEnv("STATION")
-	nameEnv, nameEnvSet       = os.LookupEnv("NAME")
 
 	logEnvEnv, logEnvEnvSet     = os.LookupEnv("LOG_ENV")
 	logLevelEnv, logLevelEnvSet = os.LookupEnv("LOG_LEVEL")
 
-	logEnv, logLevel, station, name string
+	station, logEnv, logLevel string
 )
 
 type options struct {
-	station, name string
-	log           *zap.Logger
+	station string
+	log     *zap.Logger
 }
 
 func newOptions() (*options, error) {
+	flag.StringVar(&station, "station", "", "station code, you can find them looking here: https://content.meteotrentino.it/dati-meteo/stazioni/dati-meteo.html")
+
 	flag.StringVar(&logEnv, "log-env", "development", "logging enviroment type: production, development (default: development)")
 	flag.StringVar(&logLevel, "log-level", "debug", "logging level: info, debug, error, ... (default: debug)")
-
-	flag.StringVar(&station, "station", "", "station code, you can find them looking here: https://content.meteotrentino.it/dati-meteo/stazioni/dati-meteo.html")
-	flag.StringVar(&name, "name", "", "station name")
 
 	flag.Parse()
 
 	if stationEnvSet {
 		station = stationEnv
-	}
-
-	if nameEnvSet {
-		name = nameEnv
 	}
 
 	if logEnvEnvSet {
@@ -58,10 +51,6 @@ func newOptions() (*options, error) {
 		return nil, ErrMissingStation
 	}
 
-	if name == "" {
-		return nil, ErrMissingName
-	}
-
 	logger, err := log(logEnv, logLevel)
 	if err != nil {
 		return nil, fmt.Errorf("error logger creation: %w", err)
@@ -69,7 +58,6 @@ func newOptions() (*options, error) {
 
 	return &options{
 		station: station,
-		name:    name,
 		log:     logger,
 	}, nil
 }
