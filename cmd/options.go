@@ -19,12 +19,14 @@ var (
 	logEnvEnv, logEnvEnvSet     = os.LookupEnv("LOG_ENV")
 	logLevelEnv, logLevelEnvSet = os.LookupEnv("LOG_LEVEL")
 
-	station, logEnv, logLevel string
+	metricsServerEnv, metricsServerEnvSet = os.LookupEnv("METRICS_SERVER")
+
+	station, logEnv, logLevel, metricsServer string
 )
 
 type options struct {
-	station string
-	log     *zap.Logger
+	station, metricsServer string
+	log                    *zap.Logger
 }
 
 func newOptions() (*options, error) {
@@ -32,6 +34,8 @@ func newOptions() (*options, error) {
 
 	flag.StringVar(&logEnv, "log-env", "development", "logging enviroment type: production, development (default: development)")
 	flag.StringVar(&logLevel, "log-level", "debug", "logging level: info, debug, error, ... (default: debug)")
+
+	flag.StringVar(&metricsServer, "metrics-server", ":3000", "metrics server binding addresse <ip>:<port> (default: :3000)")
 
 	flag.Parse()
 
@@ -47,6 +51,10 @@ func newOptions() (*options, error) {
 		logLevel = logLevelEnv
 	}
 
+	if metricsServerEnvSet {
+		metricsServer = metricsServerEnv
+	}
+
 	if station == "" {
 		return nil, ErrMissingStation
 	}
@@ -57,8 +65,9 @@ func newOptions() (*options, error) {
 	}
 
 	return &options{
-		station: station,
-		log:     logger,
+		station:       station,
+		metricsServer: metricsServer,
+		log:           logger,
 	}, nil
 }
 

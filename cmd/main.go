@@ -10,10 +10,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"wouldgo.me/meteotrentino-exporter/pkg/api"
+	"wouldgo.me/meteotrentino-exporter/pkg/metrics"
 )
 
 func main() {
@@ -29,18 +28,20 @@ func main() {
 	defer stop()
 
 	logger.Info("starting prometheus exporter", zap.String("station", opts.station))
-	reg := prometheus.NewRegistry()
-	m := NewMetrics(reg)
+	m := metrics.NewMetrics()
 
 	meteo, err := api.NewMeteoTrentino(api.MeteoTrentinoOptions{
 		StationCode: opts.station,
+
+		Metrics: m,
+		Logger:  logger,
 	})
 	if err != nil {
 		logger.Fatal("error creating meteo trentino client", zap.Error(err))
 	}
 
 	router := http.NewServeMux()
-	router.Handle("GET /metrics", promhttp.HandlerFor(reg, promhttp.HandlerOpts{Registry: reg}))
+	router.Handle("GET /metrics", m.Handler())
 	router.HandleFunc("GET /up", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
@@ -49,16 +50,16 @@ func main() {
 	defer timer.Stop()
 
 	go func() {
-		logger.Debug("fetching for the first time data for station", zap.String("station", opts.station))
-		err := meteo.FetchData(ctx)
+		logger.Info("fetching time data for station", zap.String("station", opts.station))
+		latestStats, err := meteo.FetchData(ctx)
 		if err != nil {
-			logger.Error("error fetching data for the first time", zap.Error(err))
+			logger.Error("error fetching data", zap.Error(err))
 		}
 
-		m.temperature.Set(meteo.Temperature())
-		m.humidity.Set(meteo.Humidity())
-		m.precipitation.Set(meteo.Precipitation())
-		m.radiation.Set(meteo.Radiation())
+		err = m.UpdateMetrics(latestStats)
+		if err != nil {
+			logger.Error("error updating metrics", zap.Error(err))
+		}
 
 		for {
 			select {
@@ -66,20 +67,22 @@ func main() {
 				return
 			case <-timer.C:
 				logger.Debug("fetching data for station", zap.String("station", opts.station))
-				err := meteo.FetchData(ctx)
+				latestStats, err := meteo.FetchData(ctx)
 				if err != nil {
 					logger.Error("error fetching data", zap.Error(err))
 				}
-				m.temperature.Set(meteo.Temperature())
-				m.humidity.Set(meteo.Humidity())
-				m.precipitation.Set(meteo.Precipitation())
-				m.radiation.Set(meteo.Radiation())
+
+				err = m.UpdateMetrics(latestStats)
+				if err != nil {
+					logger.Error("error updating metrics", zap.Error(err))
+				}
 			}
 		}
 	}()
 
 	go func() {
-		err := http.ListenAndServe(":8080", router)
+		logger.Info("metrics server", zap.String("addr", opts.metricsServer))
+		err := http.ListenAndServe(opts.metricsServer, router)
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Fatal("error starting http server", zap.Error(err))
 		}
@@ -97,41 +100,4 @@ func main() {
 	if !errors.Is(err, syscall.EINVAL) {
 		panic(err)
 	}
-}
-
-type Metrics struct {
-	temperature   prometheus.Gauge
-	humidity      prometheus.Gauge
-	precipitation prometheus.Gauge
-	radiation     prometheus.Gauge
-}
-
-func NewMetrics(reg prometheus.Registerer) *Metrics {
-	m := &Metrics{
-		temperature: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "temperature_celsius",
-			Help: "Current temperature in celsius",
-		}),
-		humidity: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "humidity_percent",
-			Help: "Current relative humidity in percent",
-		}),
-		precipitation: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "precipitation_mm",
-			Help: "Current precipitation in millimeters",
-		}),
-		radiation: prometheus.NewGauge(prometheus.GaugeOpts{
-			Name: "radiation_watts_per_square_meter",
-			Help: "Current radiation in watts per square meter",
-		}),
-	}
-
-	reg.MustRegister(
-		m.temperature,
-		m.humidity,
-		m.precipitation,
-		m.radiation,
-	)
-
-	return m
 }
