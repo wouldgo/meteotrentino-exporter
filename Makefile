@@ -7,13 +7,6 @@ BIN_PATH := $(OUT)/$(BIN_NAME)
 IMAGE := ghcr.io/wouldgo/meteotrentino-exporter
 VERSION := 0.0.1
 
-# EXCLUDED_PACKAGES := \
-# 	wouldgo.me/meteotrentino-exporter \
-# 	wouldgo.me/meteotrentino-exporter/internal/api \
-# 	wouldgo.me/meteotrentino-exporter/mocks
-
-# PACKAGES := $(shell go list ./... | grep -Fvx -f <(printf '%s\n' $(EXCLUDED_PACKAGES)))
-
 .PHONY: clean update install lint generate build run test musl
 default: clean install build
 
@@ -45,10 +38,6 @@ build:
 
 run: lint install
 	STATION="T0147" go run cmd/*.go
-
-# test:
-# 	go test -tags=test -race -parallel=10 -timeout 120s -cover -coverprofile=_out/.coverage -v $(PACKAGES);
-# 	go tool cover -html=_out/.coverage -o=./_out/coverage.html
 
 docker:
 	docker build --tag "$(IMAGE):$(VERSION)" --file cmd/Dockerfile .
