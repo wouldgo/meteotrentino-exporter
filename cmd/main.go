@@ -28,16 +28,21 @@ func main() {
 	defer stop()
 
 	logger.Info("starting prometheus exporter", zap.String("station", opts.station))
-	m := metrics.NewMetrics()
-
 	meteo, err := api.NewMeteoTrentino(api.MeteoTrentinoOptions{
 		StationCode: opts.station,
-
-		Metrics: m,
-		Logger:  logger,
+		Logger:      logger,
 	})
 	if err != nil {
 		logger.Fatal("error creating meteo trentino client", zap.Error(err))
+	}
+
+	m, err := metrics.NewMetrics(metrics.MetricsOptions{
+		Api:             meteo,
+		Logger:          logger,
+		TimeoutDuration: 5 * time.Second,
+	})
+	if err != nil {
+		logger.Fatal("error creating metrics", zap.Error(err))
 	}
 
 	router := http.NewServeMux()
@@ -48,37 +53,6 @@ func main() {
 
 	timer := time.NewTicker(time.Minute * 15)
 	defer timer.Stop()
-
-	go func() {
-		logger.Info("fetching time data for station", zap.String("station", opts.station))
-		latestStats, err := meteo.FetchData(ctx)
-		if err != nil {
-			logger.Error("error fetching data", zap.Error(err))
-		}
-
-		err = m.UpdateMetrics(latestStats)
-		if err != nil {
-			logger.Error("error updating metrics", zap.Error(err))
-		}
-
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case <-timer.C:
-				logger.Debug("fetching data for station", zap.String("station", opts.station))
-				latestStats, err := meteo.FetchData(ctx)
-				if err != nil {
-					logger.Error("error fetching data", zap.Error(err))
-				}
-
-				err = m.UpdateMetrics(latestStats)
-				if err != nil {
-					logger.Error("error updating metrics", zap.Error(err))
-				}
-			}
-		}
-	}()
 
 	go func() {
 		logger.Info("metrics server", zap.String("addr", opts.metricsServer))

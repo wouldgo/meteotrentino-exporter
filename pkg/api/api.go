@@ -11,14 +11,20 @@ import (
 
 	"github.com/go-playground/validator/v10"
 	"go.uber.org/zap"
-	"wouldgo.me/meteotrentino-exporter/pkg/metrics"
 )
+
+type WeatherStats interface {
+	Temperature() float64
+	Humidity() float64
+	Precipitation() float64
+	Radiation() float64
+}
 
 var (
 	validate = validator.New(validator.WithRequiredStructEnabled())
 
-	_ MeteoTrentino        = (*meteotrentino)(nil)
-	_ metrics.WeatherStats = (*meteoTrentinoStats)(nil)
+	_ MeteoTrentino = (*meteotrentino)(nil)
+	_ WeatherStats  = (*meteoTrentinoStats)(nil)
 
 	ErrParsing   = errors.New("parsing error")
 	ErrUnMarshal = fmt.Errorf("json unmarshal in error")
@@ -27,23 +33,21 @@ var (
 const stationLastData string = "http://dati.meteotrentino.it/service.asmx/getLastDataOfMeteoStation"
 
 type MeteoTrentinoOptions struct {
-	StationCode string           `validate:"required"`
-	Metrics     *metrics.Metrics `validate:"required"`
-	Logger      *zap.Logger      `validate:"required"`
+	StationCode string      `validate:"required"`
+	Logger      *zap.Logger `validate:"required"`
 
 	TimeoutDuration time.Duration
 }
 
 type MeteoTrentino interface {
-	FetchData(ctx context.Context) (metrics.WeatherStats, error)
+	FetchData(ctx context.Context) (WeatherStats, error)
 }
 
 type meteotrentino struct {
 	client          *http.Client
 	timeoutDuration time.Duration
 
-	metrics *metrics.Metrics
-	logger  *zap.Logger
+	logger *zap.Logger
 
 	stationLastDataUrl string
 }
@@ -88,7 +92,6 @@ func NewMeteoTrentino(opts MeteoTrentinoOptions) (MeteoTrentino, error) {
 		client:             httpClient,
 		timeoutDuration:    timeoutDuration,
 		stationLastDataUrl: u.String(),
-		metrics:            opts.Metrics,
 		logger:             opts.Logger,
 	}, nil
 }
@@ -113,8 +116,8 @@ func (mTS *meteoTrentinoStats) Radiation() float64 {
 	return mTS.radiation
 }
 
-func (m *meteotrentino) FetchData(ctx context.Context) (metrics.WeatherStats, error) {
-	m.logger.Debug("fetching data from", zap.String("url", m.stationLastDataUrl))
+func (m *meteotrentino) FetchData(ctx context.Context) (WeatherStats, error) {
+	m.logger.Info("fetching data from", zap.String("url", m.stationLastDataUrl))
 	innerCtx, cancel := context.WithTimeout(ctx, m.timeoutDuration)
 	defer cancel()
 	req, err := http.NewRequestWithContext(innerCtx, http.MethodGet, m.stationLastDataUrl, nil)
@@ -130,7 +133,12 @@ func (m *meteotrentino) FetchData(ctx context.Context) (metrics.WeatherStats, er
 	if response.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("received non-200 response code: %d", response.StatusCode)
 	}
-	defer response.Body.Close()
+	defer func() {
+		err := response.Body.Close()
+		if err != nil {
+			m.logger.Warn("error closing body", zap.Error(err))
+		}
+	}()
 
 	var data meteotrentinoResponse
 

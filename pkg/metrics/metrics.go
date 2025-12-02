@@ -1,21 +1,32 @@
 package metrics
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
+	"wouldgo.me/meteotrentino-exporter/pkg/api"
 )
 
-type WeatherStats interface {
-	Temperature() float64
-	Humidity() float64
-	Precipitation() float64
-	Radiation() float64
+var validate = validator.New(validator.WithRequiredStructEnabled())
+
+type MetricsOptions struct {
+	Api    api.MeteoTrentino `validate:"required"`
+	Logger *zap.Logger       `validate:"required"`
+
+	TimeoutDuration time.Duration
 }
 
 type Metrics struct {
-	reg *prometheus.Registry
+	reg     *prometheus.Registry
+	api     api.MeteoTrentino
+	logger  *zap.Logger
+	timeout time.Duration
 
 	temperature   prometheus.Gauge
 	humidity      prometheus.Gauge
@@ -23,10 +34,32 @@ type Metrics struct {
 	radiation     prometheus.Gauge
 }
 
-func NewMetrics() *Metrics {
+func NewMetrics(opts MetricsOptions) (*Metrics, error) {
+	err := validate.Struct(opts)
+	if err != nil {
+		var invalidValidationError *validator.InvalidValidationError
+		if errors.As(err, &invalidValidationError) {
+			return nil, err
+		}
+
+		var validateErrs validator.ValidationErrors
+		if errors.As(err, &validateErrs) {
+			errs := make([]error, len(validateErrs))
+			for _, e := range validateErrs {
+				errs = append(errs, e)
+			}
+			return nil, errors.Join(errs...)
+		}
+
+		return nil, err
+	}
+
 	reg := prometheus.NewRegistry()
 	m := &Metrics{
-		reg: reg,
+		reg:     reg,
+		api:     opts.Api,
+		logger:  opts.Logger,
+		timeout: opts.TimeoutDuration,
 		temperature: prometheus.NewGauge(prometheus.GaugeOpts{
 			Name: "temperature_celsius",
 			Help: "Current temperature in celsius",
@@ -52,10 +85,10 @@ func NewMetrics() *Metrics {
 		m.radiation,
 	)
 
-	return m
+	return m, nil
 }
 
-func (m *Metrics) UpdateMetrics(latestMetrics WeatherStats) error {
+func (m *Metrics) updateMetrics(latestMetrics api.WeatherStats) error {
 	m.temperature.Set(latestMetrics.Temperature())
 	m.humidity.Set(latestMetrics.Humidity())
 	m.precipitation.Set(latestMetrics.Precipitation())
@@ -65,5 +98,26 @@ func (m *Metrics) UpdateMetrics(latestMetrics WeatherStats) error {
 }
 
 func (m *Metrics) Handler() http.Handler {
-	return promhttp.HandlerFor(m.reg, promhttp.HandlerOpts{Registry: m.reg})
+	promHandler := promhttp.HandlerFor(m.reg, promhttp.HandlerOpts{
+		Registry: m.reg,
+	})
+
+	h := http.HandlerFunc(func(rsp http.ResponseWriter, req *http.Request) {
+		latestStats, err := m.api.FetchData(req.Context())
+		if err != nil {
+			m.logger.Error("error fetching data", zap.Error(err))
+		}
+
+		err = m.updateMetrics(latestStats)
+		if err != nil {
+			m.logger.Error("error updating metrics", zap.Error(err))
+		}
+
+		promHandler.ServeHTTP(rsp, req)
+	})
+
+	return http.TimeoutHandler(h, m.timeout, fmt.Sprintf(
+		"Exceeded configured timeout of %v.\n",
+		m.timeout,
+	))
 }
