@@ -5,10 +5,12 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+	"wouldgo.me/meteotrentino-exporter/pkg/metrics"
 )
 
 var (
@@ -21,12 +23,23 @@ var (
 
 	metricsServerEnv, metricsServerEnvSet = os.LookupEnv("METRICS_SERVER")
 
+	enableInfluxDbEnv, enableInfluxDbEnvSet = os.LookupEnv("ENABLE_INFLUXDB")
+
 	station, logEnv, logLevel, metricsServer string
+	enableInfluxDb                           bool
 )
+
+func ErrWrongParam(param string) error {
+	return fmt.Errorf("wrong parameter value for %s", param)
+}
 
 type options struct {
 	station, metricsServer string
-	log                    *zap.Logger
+	enableInfluxDb         bool
+
+	log *zap.Logger
+
+	influxdbConfig *metrics.InfluxDbConfig
 }
 
 func newOptions() (*options, error) {
@@ -37,6 +50,7 @@ func newOptions() (*options, error) {
 
 	flag.StringVar(&metricsServer, "metrics-server", ":3000", "metrics server binding addresse <ip>:<port> (default: :3000)")
 
+	flag.BoolVar(&enableInfluxDb, "enable-influxdb", false, "metrics will be publish to influxdb")
 	flag.Parse()
 
 	if stationEnvSet {
@@ -55,6 +69,14 @@ func newOptions() (*options, error) {
 		metricsServer = metricsServerEnv
 	}
 
+	if enableInfluxDbEnvSet {
+		boolValue, err := strconv.ParseBool(enableInfluxDbEnv)
+		if err != nil {
+			return nil, ErrWrongParam("enableInfluxDb")
+		}
+		enableInfluxDb = boolValue
+	}
+
 	if station == "" {
 		return nil, ErrMissingStation
 	}
@@ -64,10 +86,17 @@ func newOptions() (*options, error) {
 		return nil, fmt.Errorf("error logger creation: %w", err)
 	}
 
+	influxDbConfig, err := metrics.ParseInfluxDbConfig()
+	if err != nil {
+		return nil, fmt.Errorf("error reading influxdb config: %w", err)
+	}
+
 	return &options{
-		station:       station,
-		metricsServer: metricsServer,
-		log:           logger,
+		station:        station,
+		metricsServer:  metricsServer,
+		log:            logger,
+		enableInfluxDb: enableInfluxDb,
+		influxdbConfig: influxDbConfig,
 	}, nil
 }
 
