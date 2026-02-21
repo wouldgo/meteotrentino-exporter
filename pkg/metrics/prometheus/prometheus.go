@@ -1,4 +1,4 @@
-package metrics
+package prometheus_metrics
 
 import (
 	"errors"
@@ -11,16 +11,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 	"wouldgo.me/meteotrentino-exporter/pkg/api"
+	"wouldgo.me/meteotrentino-exporter/pkg/metrics"
 )
 
-type PromOptions struct {
+type MetricsConfig struct {
 	Api    api.MeteoTrentino `validate:"required"`
 	Logger *zap.Logger       `validate:"required"`
 
 	TimeoutDuration time.Duration
 }
 
-type PromMetrics struct {
+type PrometheusMetrics struct {
 	reg     *prometheus.Registry
 	api     api.MeteoTrentino
 	logger  *zap.Logger
@@ -32,8 +33,8 @@ type PromMetrics struct {
 	radiation     prometheus.Gauge
 }
 
-func NewPromMetrics(opts PromOptions) (*PromMetrics, error) {
-	err := validate.Struct(opts)
+func NewPrometheusMetrics(opts MetricsConfig) (*PrometheusMetrics, error) {
+	err := metrics.Validate.Struct(opts)
 	if err != nil {
 		var invalidValidationError *validator.InvalidValidationError
 		if errors.As(err, &invalidValidationError) {
@@ -53,7 +54,7 @@ func NewPromMetrics(opts PromOptions) (*PromMetrics, error) {
 	}
 
 	reg := prometheus.NewRegistry()
-	m := &PromMetrics{
+	m := &PrometheusMetrics{
 		reg:     reg,
 		api:     opts.Api,
 		logger:  opts.Logger,
@@ -86,7 +87,7 @@ func NewPromMetrics(opts PromOptions) (*PromMetrics, error) {
 	return m, nil
 }
 
-func (m *PromMetrics) updateMetrics(latestMetrics api.WeatherStats) error {
+func (m *PrometheusMetrics) updateMetrics(latestMetrics api.WeatherStats) error {
 	temp := latestMetrics.Temperature()
 	hum := latestMetrics.Humidity()
 	prec := latestMetrics.Precipitation()
@@ -100,7 +101,7 @@ func (m *PromMetrics) updateMetrics(latestMetrics api.WeatherStats) error {
 	return nil
 }
 
-func (m *PromMetrics) Handler() http.Handler {
+func (m *PrometheusMetrics) Handler() http.Handler {
 	promHandler := promhttp.HandlerFor(m.reg, promhttp.HandlerOpts{
 		Registry: m.reg,
 	})

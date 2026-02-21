@@ -1,12 +1,10 @@
-package metrics
+package influxdb_metrics
 
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"maps"
-	"os"
 	"slices"
 	"strings"
 	"time"
@@ -17,51 +15,10 @@ import (
 
 	"go.uber.org/zap"
 	"wouldgo.me/meteotrentino-exporter/pkg/api"
+	"wouldgo.me/meteotrentino-exporter/pkg/metrics"
 )
 
-var (
-	databaseEnv, databaseEnvSet = os.LookupEnv("INFLUXDB_DATABASE")
-	orgEnv, orgEnvSet           = os.LookupEnv("INFLUXDB_ORG")
-	tokenEnv, tokenEnvSet       = os.LookupEnv("INFLUXDB_TOKEN")
-	urlEnv, urlEnvSet           = os.LookupEnv("INFLUXDB_URL")
-
-	database, org, token, url string
-)
-
-type InfluxDbConfig struct {
-	Database, Org, Token, Url string
-}
-
-func init() {
-	flag.StringVar(&database, "influxdb-database", "", "influxdb database")
-	flag.StringVar(&org, "influxdb-org", "", "influxdb organization")
-	flag.StringVar(&token, "influxdb-token", "", "influxdb token")
-	flag.StringVar(&url, "influxdb-url", "", "influxdb url")
-}
-
-func ParseInfluxDbConfig() (*InfluxDbConfig, error) {
-	if databaseEnvSet {
-		database = databaseEnv
-	}
-	if orgEnvSet {
-		org = orgEnv
-	}
-	if tokenEnvSet {
-		token = tokenEnv
-	}
-	if urlEnvSet {
-		url = urlEnv
-	}
-
-	return &InfluxDbConfig{
-		Database: database,
-		Org:      org,
-		Token:    token,
-		Url:      url,
-	}, nil
-}
-
-type InfluxDbOptions struct {
+type MetricsConfig struct {
 	Logger  *zap.Logger `validate:"required"`
 	Station string      `validate:"required"`
 
@@ -79,8 +36,8 @@ type InfluxDbMetrics struct {
 	station string
 }
 
-func NewInfluxDbMetrics(opts InfluxDbOptions) (*InfluxDbMetrics, error) {
-	err := validate.Struct(opts)
+func NewInfluxDbMetrics(opts MetricsConfig) (*InfluxDbMetrics, error) {
+	err := metrics.Validate.Struct(opts)
 	if err != nil {
 		var invalidValidationError *validator.InvalidValidationError
 		if errors.As(err, &invalidValidationError) {

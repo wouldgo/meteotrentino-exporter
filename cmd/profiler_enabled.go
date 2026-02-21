@@ -1,6 +1,6 @@
 //go:build profile
 
-package main
+package options
 
 import (
 	"errors"
@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func runProfiler(addr string, logger *zap.Logger) {
+func RunProfiler(addr string, logger *zap.Logger) {
 	if addr == "" {
 		panic("you must provide a profiler addr")
 	}

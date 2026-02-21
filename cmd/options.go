@@ -1,16 +1,14 @@
-package main
+package options
 
 import (
 	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
-	"wouldgo.me/meteotrentino-exporter/pkg/metrics"
 )
 
 var (
@@ -20,83 +18,64 @@ var (
 
 	logEnvEnv, logEnvEnvSet     = os.LookupEnv("LOG_ENV")
 	logLevelEnv, logLevelEnvSet = os.LookupEnv("LOG_LEVEL")
-
-	metricsServerEnv, metricsServerEnvSet = os.LookupEnv("METRICS_SERVER")
-
-	enableInfluxDbEnv, enableInfluxDbEnvSet = os.LookupEnv("ENABLE_INFLUXDB")
-
-	station, logEnv, logLevel, metricsServer string
-	enableInfluxDb                           bool
 )
 
 func ErrWrongParam(param string) error {
 	return fmt.Errorf("wrong parameter value for %s", param)
 }
 
-type options struct {
-	station, metricsServer string
-	enableInfluxDb         bool
-
-	log *zap.Logger
-
-	influxdbConfig *metrics.InfluxDbConfig
+type Options struct {
+	station, logEnv, logLevel *string
 }
 
-func newOptions() (*options, error) {
+type Config struct {
+	Station string
+
+	Log *zap.Logger
+}
+
+func NewOptions() *Options {
+	var station, logEnv, logLevel string
+
 	flag.StringVar(&station, "station", "", "station code, you can find them looking here: https://content.meteotrentino.it/dati-meteo/stazioni/dati-meteo.html")
 
 	flag.StringVar(&logEnv, "log-env", "development", "logging enviroment type: production, development (default: development)")
 	flag.StringVar(&logLevel, "log-level", "debug", "logging level: info, debug, error, ... (default: debug)")
 
-	flag.StringVar(&metricsServer, "metrics-server", ":3000", "metrics server binding addresse <ip>:<port> (default: :3000)")
+	return &Options{
+		&station,
+		&logEnv,
+		&logLevel,
+	}
+}
 
-	flag.BoolVar(&enableInfluxDb, "enable-influxdb", false, "metrics will be publish to influxdb")
+func (o *Options) Read() (*Config, error) {
 	flag.Parse()
 
 	if stationEnvSet {
-		station = stationEnv
+		o.station = &stationEnv
 	}
 
 	if logEnvEnvSet {
-		logEnv = logEnvEnv
+		o.logEnv = &logEnvEnv
 	}
 
 	if logLevelEnvSet {
-		logLevel = logLevelEnv
+		o.logLevel = &logLevelEnv
 	}
 
-	if metricsServerEnvSet {
-		metricsServer = metricsServerEnv
-	}
-
-	if enableInfluxDbEnvSet {
-		boolValue, err := strconv.ParseBool(enableInfluxDbEnv)
-		if err != nil {
-			return nil, ErrWrongParam("enableInfluxDb")
-		}
-		enableInfluxDb = boolValue
-	}
-
-	if station == "" {
+	if *o.station == "" {
 		return nil, ErrMissingStation
 	}
 
-	logger, err := log(logEnv, logLevel)
+	logger, err := log(*o.logEnv, *o.logLevel)
 	if err != nil {
 		return nil, fmt.Errorf("error logger creation: %w", err)
 	}
 
-	influxDbConfig, err := metrics.ParseInfluxDbConfig()
-	if err != nil {
-		return nil, fmt.Errorf("error reading influxdb config: %w", err)
-	}
-
-	return &options{
-		station:        station,
-		metricsServer:  metricsServer,
-		log:            logger,
-		enableInfluxDb: enableInfluxDb,
-		influxdbConfig: influxDbConfig,
+	return &Config{
+		Station: *o.station,
+		Log:     logger,
 	}, nil
 }
 

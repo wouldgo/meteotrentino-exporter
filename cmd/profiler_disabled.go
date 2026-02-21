@@ -1,8 +1,8 @@
 //go:build !profile
 
-package main
+package options
 
 import "go.uber.org/zap"
 
-func runProfiler(addr string, logger *zap.Logger) {
+func RunProfiler(addr string, logger *zap.Logger) {
 }
