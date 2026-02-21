@@ -65,9 +65,9 @@ type InfluxDbOptions struct {
 	Logger  *zap.Logger `validate:"required"`
 	Station string      `validate:"required"`
 
-	Database string
+	Database string `validate:"required"`
 	Org      string
-	Token    string
+	Token    string `validate:"required"`
 	Url      string `validate:"required"`
 }
 
