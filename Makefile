@@ -5,7 +5,7 @@ GCC := $(OUT)/$(BUILDARCH)-linux-musl-cross/bin/$(BUILDARCH)-linux-musl-gcc
 BIN_NAME := meteotrentino-exporter
 BIN_PATH := $(OUT)/$(BIN_NAME)
 IMAGE := ghcr.io/wouldgo/meteotrentino-exporter
-VERSION := 0.0.1
+VERSION := 0.1.0
 
 .PHONY: clean update install lint generate build run profile run_profile run_influxdb test musl
 default: clean install build
