@@ -4,12 +4,12 @@ BUILDARCH := $(shell uname -m)
 GCC := $(OUT)/$(BUILDARCH)-linux-musl-cross/bin/$(BUILDARCH)-linux-musl-gcc
 BIN_NAME := meteotrentino-exporter
 BIN_PATH := $(OUT)/$(BIN_NAME)
-IMAGE := ghcr.io/wouldgo/meteotrentino-exporter
+PACKAGE_REGISTRY := ghcr.io/wouldgo
 VERSION := 0.1.0
 
-.PHONY: clean update install lint generate build_influxdb build run_influxdb run run_profile profile docker musl
-default: clean install build
-influxdb: clean install
+.PHONY: clean update install lint generate build_influxdb build_prometheus run_influxdb run_prometheus run_profile profile docker musl
+default: clean install build_prometheus
+influxdb: clean install build_influxdb
 
 clean:
 	rm -Rf $(OUT)/*
@@ -33,38 +33,56 @@ build_influxdb:
 	CC_FOR_TARGET=$(GCC) \
 	CC=$(GCC) \
 	go build \
+		-tags influxdb \
 		-ldflags "-s -w -linkmode external -extldflags -static" \
 		-trimpath \
-		-a -o $(BIN_PATH) ./cmd/influxdb
+		-a -o $(BIN_PATH) ./cmd
 
-build:
+build_prometheus:
 	CGO_ENABLED=1 \
 	CC_FOR_TARGET=$(GCC) \
 	CC=$(GCC) \
 	go build \
+		-tags prometheus \
 		-ldflags "-s -w -linkmode external -extldflags -static" \
 		-trimpath \
-		-a -o $(BIN_PATH) ./cmd/prometheus
+		-a -o $(BIN_PATH) ./cmd
 
-run_influxdb:
+run_influxdb: lint install
 	ENABLE_INFLUXDB=true \
 	INFLUXDB_URL=http://127.0.0.1:9000 \
 	INFLUXDB_DATABASE="nothing" \
 	INFLUXDB_TOKEN="nothing" \
 	STATION=T0147 \
-	go run ./cmd/influxdb
+	go run \
+		-tags influxdb \
+		./cmd
 
-run: lint install
-	STATION="T0147" go run ./cmd/prometheus
+run_prometheus: lint install
+	STATION="T0147" \
+	go run \
+		-tags prometheus \
+		./cmd
 
 run_profile: lint install
-	STATION="T0147" go run -tags profile ./cmd/prometheus
+	STATION="T0147" \
+	go run \
+		-tags profile,prometheus \
+		./cmd
 
 profile:
 	go tool pprof --http=:8081 http://127.0.0.0:8080/debug/pprof/allocs?seconds=120
 
 docker:
-	docker build --tag "$(IMAGE):$(VERSION)" --file cmd/Dockerfile .
+	docker build --target prometheus \
+  	--tag "$(PACKAGE_REGISTRY)/meteotrentino-exporter:$(VERSION)" \
+		--file cmd/Dockerfile \
+  	.
+
+	docker build --target influxdb \
+		--tag "$(PACKAGE_REGISTRY)/influxdb-meteotrentino:$(VERSION)" \
+		--file cmd/Dockerfile \
+		.
 
 musl:
 	if [ ! -d "$(OUT)/$(BUILDARCH)-linux-musl-cross" ]; then \

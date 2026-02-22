@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	options "wouldgo.me/meteotrentino-exporter/cmd"
+	"wouldgo.me/meteotrentino-exporter/pkg/options"
 )
 
 var (

@@ -1,3 +1,5 @@
+//go:build prometheus
+
 package main
 
 import (
@@ -11,9 +13,9 @@ import (
 	"time"
 
 	"go.uber.org/zap"
-	options "wouldgo.me/meteotrentino-exporter/cmd"
 	"wouldgo.me/meteotrentino-exporter/pkg/api"
 	prometheus_metrics "wouldgo.me/meteotrentino-exporter/pkg/metrics/prometheus"
+	"wouldgo.me/meteotrentino-exporter/pkg/options"
 )
 
 func main() {

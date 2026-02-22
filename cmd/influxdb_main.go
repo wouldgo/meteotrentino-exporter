@@ -1,3 +1,5 @@
+//go:build influxdb
+
 package main
 
 import (
